@@ -12,10 +12,11 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
-    - name: 🧰 Install and Authenticate Tailscale
+    - name: 🧰 Install and Start Tailscale
       env:
         TAILSCALE_AUTH_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
       run: |
+        echo "🚀 Installing Tailscale..."
         brew install --quiet tailscale
         sudo tailscaled --cleanup || true
         sudo tailscaled > /tmp/tailscaled.log 2>&1 &
@@ -24,17 +25,40 @@ jobs:
         echo "✅ Tailscale connected!"
         tailscale ip -4
 
-    - name: 🍎 Enable macOS Screen Sharing (VNC)
+    - name: 🍏 Enable Full macOS GUI (Finder, Dock, etc.)
+      run: |
+        echo "🧠 Starting macOS GUI processes..."
+        open -a Finder
+        open -a Dock
+        open -a SystemUIServer
+        echo "✅ GUI environment initialized."
+
+    - name: 🍎 Enable Screen Sharing (VNC)
       env:
         VNC_PASS: ${{ secrets.VNC_PASS }}
       run: |
-        # Enable remote management
+        echo "🔧 Enabling Screen Sharing..."
         sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
           -activate -configure -access -on -restart -agent -privs -all
 
-        # Set VNC password (encrypted)
         echo "$VNC_PASS" | perl -we 'use Digest::MD5 qw(md5); use MIME::Base64; my $pw=<>; chomp($pw); print encode_base64(md5($pw));' | sudo tee /Library/Preferences/com.apple.VNCSettings.txt >/dev/null
-        
+
+        echo "✅ VNC password set and service activated."
+
+    - name: 🌍 Show Connection Info
+      run: |
+        echo "---------------------------------------------"
+        echo "🖥️  macOS Remote Desktop via Tailscale"
+        echo "---------------------------------------------"
+        echo "💻 Open your Tailscale app and find 'GitHub-MacOS'"
+        echo "📡 Use its IP (100.x.x.x) to connect in Remote Desktop"
+        echo "👤 Username: runner"
+        echo "🔑 Password: (your VNC_PASS secret)"
+        echo "---------------------------------------------"
+        echo "💡 You can connect using:"
+        echo "   - Microsoft Remote Desktop (Mac/Windows)"
+        echo "   - VNC Viewer / RealVNC / TightVNC"
+        echo "---------------------------------------------"        
         echo "✅ Screen Sharing (VNC) enabled."
 
     - name: 🌍 Show Connection Info
