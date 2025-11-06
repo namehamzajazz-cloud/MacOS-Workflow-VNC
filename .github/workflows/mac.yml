@@ -7,16 +7,39 @@ defaults:
 
 jobs:
   build:
-    runs-on: macos-11
+    runs-on: macos-13
+    timeout-minutes: 360
     steps:
-    - uses: actions/checkout@v2
-    - name: Setting the environment up.
+    - uses: actions/checkout@v3
+
+    - name: 🧰 Setup Environment
       env:
         NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
-        VNC_USER_PASSWORD: ${{ secrets.VNC_USER_PASSWORD }}
-        VNC_PASSWORD: ${{ secrets.VNC_PASSWORD }}
-      run: source configure.sh "$VNC_USER_PASSWORD" "$VNC_PASSWORD" "$NGROK_AUTH_TOKEN"
-    - name: ngrok is now listening to VNC connections on...
-      run: curl --silent http://127.0.0.1:4040/api/tunnels | jq '.tunnels[0].public_url'
-    - name: Setup tmate session
-      uses: mxschmitt/action-tmate@v2
+        RDP_USER: runner
+        RDP_PASS: ${{ secrets.RDP_PASS }}
+      run: |
+        brew install --quiet ngrok jq xrdp
+        echo "$RDP_PASS" | sudo dscl . -passwd /Users/$RDP_USER
+        sudo systemsetup -setremotelogin on
+        sudo launchctl load -w /Library/LaunchDaemons/xrdp.plist || true
+        ngrok authtoken "$NGROK_AUTH_TOKEN"
+        ngrok tcp 3389 --region=us > ngrok.log &
+        sleep 5
+        echo "✅ RDP Server is starting..."
+
+    - name: 🌍 Show RDP Connection Info
+      run: |
+        sleep 10
+        echo "---------------------------------------------"
+        echo "🔍 Fetching ngrok TCP tunnel info..."
+        NGROK_URL=$(curl --silent http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url')
+        echo "---------------------------------------------"
+        echo "🖥️  Connect using Microsoft Remote Desktop:"
+        echo "👉 Address: ${NGROK_URL#tcp://}"
+        echo "👤 Username: runner"
+        echo "🔑 Password: (your RDP_PASS secret)"
+        echo "---------------------------------------------"
+
+    - name: 🧑‍💻 Optional Debug Session (tmate)
+      uses: mxschmitt/action-tmate@v3
+      if: always()
