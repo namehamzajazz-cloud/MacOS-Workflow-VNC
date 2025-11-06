@@ -1,5 +1,5 @@
 name: mac
-on: 
+on:
   workflow_dispatch:
 defaults:
   run:
@@ -12,29 +12,46 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
-    - name: 🍏 Setup macOS Screen Sharing (VNC)
+    - name: 🧰 Install and Authenticate Tailscale
       env:
-        NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
+        TAILSCALE_AUTH_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
+      run: |
+        brew install --quiet tailscale
+        sudo tailscaled --cleanup || true
+        sudo tailscaled > /tmp/tailscaled.log 2>&1 &
+        sleep 5
+        sudo tailscale up --authkey "$TAILSCALE_AUTH_KEY" --hostname "GitHub-MacOS" --ssh
+        echo "✅ Tailscale connected!"
+        tailscale ip -4
+
+    - name: 🍎 Enable macOS Screen Sharing (VNC)
+      env:
         VNC_PASS: ${{ secrets.VNC_PASS }}
       run: |
-        # Enable Screen Sharing (VNC)
+        # Enable remote management
         sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
           -activate -configure -access -on -restart -agent -privs -all
-        
-        # Set VNC password
+
+        # Set VNC password (encrypted)
         echo "$VNC_PASS" | perl -we 'use Digest::MD5 qw(md5); use MIME::Base64; my $pw=<>; chomp($pw); print encode_base64(md5($pw));' | sudo tee /Library/Preferences/com.apple.VNCSettings.txt >/dev/null
         
-        # Start ngrok TCP tunnel on VNC port (5900)
-        brew install --quiet ngrok jq
-        ngrok authtoken "$NGROK_AUTH_TOKEN"
-        ngrok tcp 5900 --region=us > ngrok.log &
-        sleep 8
+        echo "✅ Screen Sharing (VNC) enabled."
 
-    - name: 🌍 Show VNC Connection Info
+    - name: 🌍 Show Connection Info
       run: |
         echo "---------------------------------------------"
-        echo "🔍 Fetching ngrok TCP tunnel info..."
-        NGROK_URL=$(curl --silent http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url')
+        echo "🖥️  Connect to your macOS VM via Remote Desktop"
+        echo "---------------------------------------------"
+        echo "💻 Get the Tailscale IP from your Tailscale app"
+        echo "🔑 Password: (your VNC_PASS secret)"
+        echo "👤 User: runner"
+        echo "---------------------------------------------"
+        echo "💡 Tip: Use Microsoft Remote Desktop or any VNC client."
+        echo "💡 Your machine should appear as 'GitHub-MacOS' in Tailscale!"
+
+    - name: 🧑‍💻 Optional Debug Session (tmate)
+      uses: mxschmitt/action-tmate@v3
+      if: always()        NGROK_URL=$(curl --silent http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url')
         echo "---------------------------------------------"
         echo "🖥️  Connect to macOS desktop with VNC (any app):"
         echo "👉 Address: ${NGROK_URL#tcp://}"
